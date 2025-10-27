@@ -13,8 +13,12 @@ const openai = new OpenAI({
 // Your GPT's system instructions
 const SYSTEM_PROMPT = `You are a helpful assistant. Replace this with your actual GPT's instructions.`;
 
-// Middleware
-app.use(express.json());
+// Middleware to capture raw body for signature verification
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString('utf8');
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Verify Slack requests
@@ -23,18 +27,31 @@ function verifySlackRequest(req) {
   const timestamp = req.headers['x-slack-request-timestamp'];
   const slackSigningSecret = process.env.SLACK_SIGNING_SECRET;
 
-  // Prevent replay attacks
-  const time = Math.floor(new Date().getTime() / 1000);
-  if (Math.abs(time - timestamp) > 300) {
+  if (!slackSignature || !timestamp) {
+    console.log('❌ Missing signature or timestamp');
     return false;
   }
 
-  const sigBasestring = `v0:${timestamp}:${JSON.stringify(req.body)}`;
+  // Prevent replay attacks
+  const time = Math.floor(new Date().getTime() / 1000);
+  if (Math.abs(time - timestamp) > 300) {
+    console.log('❌ Timestamp too old');
+    return false;
+  }
+
+  const sigBasestring = `v0:${timestamp}:${req.rawBody}`;
   const mySignature = 'v0=' + createHmac('sha256', slackSigningSecret)
     .update(sigBasestring, 'utf8')
     .digest('hex');
 
-  return slackSignature === mySignature;
+  const isValid = slackSignature === mySignature;
+  if (!isValid) {
+    console.log('❌ Signature mismatch');
+    console.log('Expected:', mySignature);
+    console.log('Received:', slackSignature);
+  }
+  
+  return isValid;
 }
 
 // Health check endpoint
