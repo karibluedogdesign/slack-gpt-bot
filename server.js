@@ -44,36 +44,36 @@ app.get('/', (req, res) => {
 
 // Slack Events endpoint
 app.post('/slack/events', async (req, res) => {
-  console.log('Received request to /slack/events');
-  
   const { type, challenge, event } = req.body;
 
   // Verify request is from Slack
   if (!verifySlackRequest(req)) {
-    console.log('Request verification failed!');
     return res.status(401).send('Unauthorized');
   }
 
   // Handle URL verification challenge
   if (type === 'url_verification') {
-    console.log('URL verification challenge received');
     return res.json({ challenge });
   }
 
   // Respond quickly to Slack (required within 3 seconds)
   res.status(200).send();
 
-  console.log('Event type:', event?.type);
-
   // Handle app_mention events
   if (event && event.type === 'app_mention') {
-    console.log('Handling app_mention');
     await handleMention(event);
   }
 
   // Handle direct messages (including AI agent side panel)
-  if (event && event.type === 'message' && event.channel_type === 'im' && !event.bot_id) {
-    console.log('Handling DM');
+  // Skip if: no text, bot message, hidden message, or message_changed subtype
+  if (event && 
+      event.type === 'message' && 
+      event.channel_type === 'im' && 
+      !event.bot_id && 
+      event.text &&
+      event.text.trim() &&
+      !event.hidden &&
+      event.subtype !== 'message_changed') {
     await handleDirectMessage(event);
   }
 });
@@ -115,12 +115,8 @@ async function handleMention(event) {
 // Handle direct messages
 async function handleDirectMessage(event) {
   try {
-    console.log('Processing DM:', event.text);
-    
     // Get conversation history if this is part of a thread
     const messages = await getThreadHistory(event);
-    
-    console.log('Calling OpenAI with', messages.length, 'history messages');
     
     // Call OpenAI
     const completion = await openai.chat.completions.create({
@@ -134,8 +130,6 @@ async function handleDirectMessage(event) {
     });
 
     const reply = completion.choices[0].message.content;
-    
-    console.log('Got reply, sending to Slack');
 
     // Send reply to Slack - use thread_ts to keep conversation in same thread
     await sendSlackMessage(event.channel, reply, event.thread_ts || event.ts);
@@ -219,8 +213,6 @@ async function sendSlackMessage(channel, text, threadTs = null) {
     
     if (!data.ok) {
       console.error('Slack API error:', data.error);
-    } else {
-      console.log('Message sent successfully');
     }
   } catch (error) {
     console.error('Error sending message to Slack:', error);
