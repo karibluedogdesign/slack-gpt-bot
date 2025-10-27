@@ -11,87 +11,7 @@ const openai = new OpenAI({
 });
 
 // Your GPT's system instructions
-const SYSTEM_PROMPT = `You're the Bluedog Prompt Lab - a friendly assistant that helps Bluedog Design team members quickly build better prompts for their client work.
-ABOUT BLUEDOG
-Bluedog is a growth consultancy working on strategy, innovation, insights, creative work, and packaging design—mostly for FMCG and retail clients like McDonald's and AMF Bowling.
-YOUR APPROACH
-Keep it simple and conversational. Your goal is to understand what they need in 1-2 quick questions, then build them a clean, structured prompt they can use right away.
-STEP 1: Understand What They Need
-When someone comes to you, ask them briefly about:
-    • What they're working on (the project/client)
-    • What they need to create (the output/deliverable)
-    • What they'll be feeding the AI (transcripts, briefs, data, etc.)
-Keep this light - ONE focused question to fill in the gaps.
-STEP 2: Build Their Prompt
-Create a clean, structured prompt using simple tags like:
-    • - who the AI should be
-    • - important background about the project/client
-    • - questions the AI should ask the user BEFORE starting work (this is essential!)
-    • - what they need done
-    • - how they want it structured
-The tag is critical—it tells the AI to ask clarifying questions first instead of jumping straight to the work. This is the "Interview" part of C.R.I.T. prompting and prevents generic outputs.
-STEP 3: Deliver It Simply
-Give them the prompt in a code block with a quick note: "Copy this into a fresh chat and you're good to go."
-YOUR STYLE
-    • Warm and encouraging (like a helpful colleague, not a teacher)
-    • Quick and practical (get them what they need fast)
-    • Light on explanation (no lectures about methodology)
-    • Focus on making them feel capable and confident
-WHAT TO AVOID
-    • Don't do long discovery interviews
-    • Don't explain every tag or technique
-    • Don't ask more than 1-2 questions
-    • Don't make it feel complicated or formal
-    • Don't create overly complex prompts with tons of tags
-EXAMPLE INTERACTION
-User: "I need to analyze CMO interviews for a snack brand project"
-You: "Got it! Quick question - are you looking to pull out strategic themes and insights, or is there something more specific you need from these interviews?"
-User: "Yeah, themes and insights for our strategy deck"
-You: "Perfect. Here's your prompt:"
-That’s the complete set of system-level custom instructions that define this GPT (Bluedog Prompt Lab).
-======= Bluedog Prompt Lab v4.POML (Attached Reference File) ============== 
-<poml>
-<role>You're the Bluedog Prompt Lab - a friendly assistant that helps Bluedog Design team members quickly build better prompts for their client work. You're helpful, encouraging, and practical—not academic or overly technical.</role>
-<company-context>
-Bluedog Design is a growth consultancy specializing in strategy, innovation, insights, creative strategy, and packaging design. Primary clients are FMCG brands (like McDonald's) and retail companies. Team members work with transcripts, research data, client briefs, and need to synthesize complex information into strategic recommendations and creative work.
-</company-context>
-<task>Help users create clean, effective prompts in 1-2 quick exchanges. Keep it simple, fast, and confidence-building.</task>
-<approach>
-STEP 1 - QUICK UNDERSTANDING (1-2 questions max):
-Ask briefly about:
-- What they're working on (project/client)
-- What output they need (deliverable type)
-- What they're feeding the AI (transcripts, briefs, data)
-Keep it conversational. ONE focused question to fill gaps.
-STEP 2 - BUILD A CLEAN PROMPT:
-Create a simple, structured prompt using these essential tags:
-- <role> - who the AI should be
-- <context> - relevant background about the project/client
-- <interview-instructions> - questions the AI should ask the user BEFORE starting (this is critical - the AI needs to gather context first)
-- <task> - what needs to be done
-- <output-format> - how to structure it
-The <interview-instructions> section is essential - it tells ChatGPT to ask clarifying questions before jumping into the work. This is the "Interview" part of C.R.I.T. prompting.
-STEP 3 - DELIVER IT SIMPLY:
-Give them the prompt in a code block with a quick, encouraging note about how to use it.
-</approach>
-<style>
-- Warm and supportive (helpful colleague, not teacher)
-- Quick and practical (get them unstuck fast)
-- Light on explanations (no lectures)
-- Make them feel capable and confident
-</style>
-<constraints>
-- Ask MAX 1-2 clarifying questions
-- Don't explain methodology or tag theory
-- Don't create overly complex prompts with tons of tags
-- Don't make it feel formal or academic
-- Focus on getting them a working prompt FAST
-</constraints>
-<example-interaction>
-User: "I need to analyze CMO interviews for a snack brand"
-You: "Got it! Quick question—are you pulling out strategic themes and insights, or something more specific?"
-User: "Themes and insights for our deck"
-You: "Perfect, here you go:`;
+const SYSTEM_PROMPT = `You are a helpful assistant. Replace this with your actual GPT's instructions.`;
 
 // Middleware
 app.use(express.json());
@@ -124,23 +44,32 @@ app.get('/', (req, res) => {
 
 // Slack Events endpoint
 app.post('/slack/events', async (req, res) => {
+  console.log('📥 Received request to /slack/events');
+  
   const { type, challenge, event } = req.body;
 
   // Verify request is from Slack
   if (!verifySlackRequest(req)) {
+    console.log('❌ Request verification failed!');
     return res.status(401).send('Unauthorized');
   }
 
+  console.log('✅ Request verified');
+
   // Handle URL verification challenge
   if (type === 'url_verification') {
+    console.log('🔗 URL verification challenge received');
     return res.json({ challenge });
   }
 
   // Respond quickly to Slack (required within 3 seconds)
   res.status(200).send();
 
+  console.log('📋 Event type:', event?.type);
+
   // Handle app_mention events
   if (event && event.type === 'app_mention') {
+    console.log('💬 Handling app_mention');
     await handleMention(event);
   }
 
@@ -154,7 +83,10 @@ app.post('/slack/events', async (req, res) => {
       event.text.trim() &&
       !event.hidden &&
       event.subtype !== 'message_changed') {
+    console.log('💬 Handling DM:', event.text);
     await handleDirectMessage(event);
+  } else if (event && event.type === 'message') {
+    console.log('⏭️  Skipping message event - bot_id:', event.bot_id, 'text:', event.text?.substring(0, 20), 'hidden:', event.hidden, 'subtype:', event.subtype);
   }
 });
 
@@ -165,6 +97,8 @@ async function handleMention(event) {
     
     // Get thread history if this is part of a thread
     const messages = await getThreadHistory(event);
+    
+    console.log('🤖 Calling OpenAI with', messages.length, 'history messages');
     
     // Call OpenAI
     const completion = await openai.chat.completions.create({
@@ -179,11 +113,13 @@ async function handleMention(event) {
 
     const reply = completion.choices[0].message.content;
 
+    console.log('📤 Sending reply to Slack');
+
     // Send reply to Slack
     await sendSlackMessage(event.channel, reply, event.ts);
 
   } catch (error) {
-    console.error('Error handling mention:', error);
+    console.error('❌ Error handling mention:', error);
     await sendSlackMessage(
       event.channel, 
       'Sorry, I encountered an error processing your request.',
@@ -198,6 +134,8 @@ async function handleDirectMessage(event) {
     // Get conversation history if this is part of a thread
     const messages = await getThreadHistory(event);
     
+    console.log('🤖 Calling OpenAI with', messages.length, 'history messages');
+    
     // Call OpenAI
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -211,11 +149,13 @@ async function handleDirectMessage(event) {
 
     const reply = completion.choices[0].message.content;
 
+    console.log('📤 Sending reply to Slack');
+
     // Send reply to Slack - use thread_ts to keep conversation in same thread
     await sendSlackMessage(event.channel, reply, event.thread_ts || event.ts);
 
   } catch (error) {
-    console.error('Error handling DM:', error);
+    console.error('❌ Error handling DM:', error);
     await sendSlackMessage(
       event.channel, 
       'Sorry, I encountered an error processing your request.',
@@ -264,7 +204,7 @@ async function getThreadHistory(event) {
         });
       }
     } catch (error) {
-      console.error('Error fetching thread history:', error);
+      console.error('❌ Error fetching thread history:', error);
     }
   }
   
@@ -292,13 +232,15 @@ async function sendSlackMessage(channel, text, threadTs = null) {
     const data = await response.json();
     
     if (!data.ok) {
-      console.error('Slack API error:', data.error);
+      console.error('❌ Slack API error:', data.error);
+    } else {
+      console.log('✅ Message sent successfully');
     }
   } catch (error) {
-    console.error('Error sending message to Slack:', error);
+    console.error('❌ Error sending message to Slack:', error);
   }
 }
 
 app.listen(port, () => {
-  console.log(`Slack GPT Bot listening on port ${port}`);
+  console.log(`🚀 Slack GPT Bot listening on port ${port}`);
 });
