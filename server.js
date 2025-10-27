@@ -11,87 +11,7 @@ const openai = new OpenAI({
 });
 
 // Your GPT's system instructions
-const SYSTEM_PROMPT = `You're the Bluedog Prompt Lab - a friendly assistant that helps Bluedog Design team members quickly build better prompts for their client work.
-ABOUT BLUEDOG
-Bluedog is a growth consultancy working on strategy, innovation, insights, creative work, and packaging design—mostly for FMCG and retail clients like McDonald's and AMF Bowling.
-YOUR APPROACH
-Keep it simple and conversational. Your goal is to understand what they need in 1-2 quick questions, then build them a clean, structured prompt they can use right away.
-STEP 1: Understand What They Need
-When someone comes to you, ask them briefly about:
-    • What they're working on (the project/client)
-    • What they need to create (the output/deliverable)
-    • What they'll be feeding the AI (transcripts, briefs, data, etc.)
-Keep this light - ONE focused question to fill in the gaps.
-STEP 2: Build Their Prompt
-Create a clean, structured prompt using simple tags like:
-    • - who the AI should be
-    • - important background about the project/client
-    • - questions the AI should ask the user BEFORE starting work (this is essential!)
-    • - what they need done
-    • - how they want it structured
-The tag is critical—it tells the AI to ask clarifying questions first instead of jumping straight to the work. This is the "Interview" part of C.R.I.T. prompting and prevents generic outputs.
-STEP 3: Deliver It Simply
-Give them the prompt in a code block with a quick note: "Copy this into a fresh chat and you're good to go."
-YOUR STYLE
-    • Warm and encouraging (like a helpful colleague, not a teacher)
-    • Quick and practical (get them what they need fast)
-    • Light on explanation (no lectures about methodology)
-    • Focus on making them feel capable and confident
-WHAT TO AVOID
-    • Don't do long discovery interviews
-    • Don't explain every tag or technique
-    • Don't ask more than 1-2 questions
-    • Don't make it feel complicated or formal
-    • Don't create overly complex prompts with tons of tags
-EXAMPLE INTERACTION
-User: "I need to analyze CMO interviews for a snack brand project"
-You: "Got it! Quick question - are you looking to pull out strategic themes and insights, or is there something more specific you need from these interviews?"
-User: "Yeah, themes and insights for our strategy deck"
-You: "Perfect. Here's your prompt:"
-That’s the complete set of system-level custom instructions that define this GPT (Bluedog Prompt Lab).
-======= Bluedog Prompt Lab v4.POML (Attached Reference File) ============== 
-<poml>
-<role>You're the Bluedog Prompt Lab - a friendly assistant that helps Bluedog Design team members quickly build better prompts for their client work. You're helpful, encouraging, and practical—not academic or overly technical.</role>
-<company-context>
-Bluedog Design is a growth consultancy specializing in strategy, innovation, insights, creative strategy, and packaging design. Primary clients are FMCG brands (like McDonald's) and retail companies. Team members work with transcripts, research data, client briefs, and need to synthesize complex information into strategic recommendations and creative work.
-</company-context>
-<task>Help users create clean, effective prompts in 1-2 quick exchanges. Keep it simple, fast, and confidence-building.</task>
-<approach>
-STEP 1 - QUICK UNDERSTANDING (1-2 questions max):
-Ask briefly about:
-- What they're working on (project/client)
-- What output they need (deliverable type)
-- What they're feeding the AI (transcripts, briefs, data)
-Keep it conversational. ONE focused question to fill gaps.
-STEP 2 - BUILD A CLEAN PROMPT:
-Create a simple, structured prompt using these essential tags:
-- <role> - who the AI should be
-- <context> - relevant background about the project/client
-- <interview-instructions> - questions the AI should ask the user BEFORE starting (this is critical - the AI needs to gather context first)
-- <task> - what needs to be done
-- <output-format> - how to structure it
-The <interview-instructions> section is essential - it tells ChatGPT to ask clarifying questions before jumping into the work. This is the "Interview" part of C.R.I.T. prompting.
-STEP 3 - DELIVER IT SIMPLY:
-Give them the prompt in a code block with a quick, encouraging note about how to use it.
-</approach>
-<style>
-- Warm and supportive (helpful colleague, not teacher)
-- Quick and practical (get them unstuck fast)
-- Light on explanations (no lectures)
-- Make them feel capable and confident
-</style>
-<constraints>
-- Ask MAX 1-2 clarifying questions
-- Don't explain methodology or tag theory
-- Don't create overly complex prompts with tons of tags
-- Don't make it feel formal or academic
-- Focus on getting them a working prompt FAST
-</constraints>
-<example-interaction>
-User: "I need to analyze CMO interviews for a snack brand"
-You: "Got it! Quick question—are you pulling out strategic themes and insights, or something more specific?"
-User: "Themes and insights for our deck"
-You: "Perfect, here you go:`;
+const SYSTEM_PROMPT = `You are a helpful assistant. Replace this with your actual GPT's instructions.`;
 
 // Middleware
 app.use(express.json());
@@ -139,136 +59,16 @@ app.post('/slack/events', async (req, res) => {
   // Respond quickly to Slack (required within 3 seconds)
   res.status(200).send();
 
-  // Log the event for debugging
-  console.log('Received event:', JSON.stringify(event, null, 2));
-
-  // Handle AI agent thread started
-  if (event && event.type === 'assistant_thread_started') {
-    await handleAssistantThread(event);
-  }
-
   // Handle app_mention events
   if (event && event.type === 'app_mention') {
     await handleMention(event);
   }
 
-  // Handle direct messages
-  if (event && event.type === 'message' && event.channel_type === 'im') {
+  // Handle direct messages (including AI agent side panel)
+  if (event && event.type === 'message' && event.channel_type === 'im' && !event.bot_id) {
     await handleDirectMessage(event);
   }
 });
-
-// Handle AI agent conversations in side panel
-async function handleAssistantThread(event) {
-  try {
-    console.log('Assistant thread event:', JSON.stringify(event.assistant_thread, null, 2));
-    
-    const userMessage = event.assistant_thread?.user_message;
-    const channelId = event.assistant_thread?.channel_id;
-    const threadTs = event.assistant_thread?.thread_ts;
-    
-    // If there's no user message yet (just opening the panel), don't process
-    if (!userMessage || !userMessage.trim()) {
-      console.log('No user message yet, skipping...');
-      return;
-    }
-    
-    // Get thread history if available
-    const messages = await getAssistantThreadHistory(channelId, threadTs);
-    
-    // Call OpenAI
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...messages,
-        { role: 'user', content: userMessage }
-      ],
-      temperature: 0.7,
-    });
-
-    const reply = completion.choices[0].message.content;
-
-    // Send reply to the assistant thread
-    await sendAssistantMessage(channelId, threadTs, reply);
-
-  } catch (error) {
-    console.error('Error handling assistant thread:', error);
-    // Only send error message if we have the channel info
-    if (event.assistant_thread?.channel_id && event.assistant_thread?.thread_ts) {
-      await sendAssistantMessage(
-        event.assistant_thread.channel_id,
-        event.assistant_thread.thread_ts,
-        'Sorry, I encountered an error processing your request.'
-      );
-    }
-  }
-}
-
-// Get conversation history from assistant thread
-async function getAssistantThreadHistory(channelId, threadTs) {
-  const messages = [];
-  
-  try {
-    const response = await fetch('https://slack.com/api/conversations.replies', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`
-      },
-      body: JSON.stringify({
-        channel: channelId,
-        ts: threadTs
-      })
-    });
-
-    const data = await response.json();
-    
-    if (data.ok && data.messages) {
-      // Convert thread messages to OpenAI format, filtering out messages without text
-      data.messages.forEach(msg => {
-        if (msg.text && msg.text.trim()) {
-          messages.push({
-            role: msg.bot_id ? 'assistant' : 'user',
-            content: msg.text
-          });
-        }
-      });
-    }
-  } catch (error) {
-    console.error('Error fetching assistant thread history:', error);
-  }
-  
-  return messages;
-}
-
-// Send message to assistant thread
-async function sendAssistantMessage(channelId, threadTs, text) {
-  try {
-    const payload = {
-      channel: channelId,
-      thread_ts: threadTs,
-      text: text
-    };
-
-    const response = await fetch('https://slack.com/api/chat.postMessage', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await response.json();
-    
-    if (!data.ok) {
-      console.error('Slack API error:', data.error);
-    }
-  } catch (error) {
-    console.error('Error sending assistant message:', error);
-  }
-}
 
 // Handle when bot is mentioned
 async function handleMention(event) {
@@ -306,11 +106,8 @@ async function handleMention(event) {
 
 // Handle direct messages
 async function handleDirectMessage(event) {
-  // Ignore bot's own messages
-  if (event.bot_id) return;
-
   try {
-    // Get conversation history
+    // Get conversation history if this is part of a thread
     const messages = await getThreadHistory(event);
     
     // Call OpenAI
@@ -326,14 +123,15 @@ async function handleDirectMessage(event) {
 
     const reply = completion.choices[0].message.content;
 
-    // Send reply to Slack
-    await sendSlackMessage(event.channel, reply);
+    // Send reply to Slack - use thread_ts to keep conversation in same thread
+    await sendSlackMessage(event.channel, reply, event.thread_ts || event.ts);
 
   } catch (error) {
     console.error('Error handling DM:', error);
     await sendSlackMessage(
       event.channel, 
-      'Sorry, I encountered an error processing your request.'
+      'Sorry, I encountered an error processing your request.',
+      event.thread_ts || event.ts
     );
   }
 }
@@ -360,9 +158,15 @@ async function getThreadHistory(event) {
       const data = await response.json();
       
       if (data.ok && data.messages) {
-        // Convert thread messages to OpenAI format, filtering out messages without text
-        data.messages.slice(0, -1).forEach(msg => {
-          const content = msg.text ? msg.text.replace(/<@[A-Z0-9]+>/g, '').trim() : '';
+        // Convert thread messages to OpenAI format, filtering out empty messages and the current one
+        data.messages.forEach(msg => {
+          // Skip the current message (we'll add it separately)
+          if (msg.ts === event.ts) return;
+          
+          // Skip messages without text
+          if (!msg.text || !msg.text.trim()) return;
+          
+          const content = msg.text.replace(/<@[A-Z0-9]+>/g, '').trim();
           if (content) {
             messages.push({
               role: msg.bot_id ? 'assistant' : 'user',
